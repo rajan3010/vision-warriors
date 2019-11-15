@@ -187,9 +187,9 @@ def downsample(img):
 def upsample(img,size_reference_list,intensity_reference_list, index):
 
     if img.ndim == 3:
-        upsampled_image = np.zeros((size_reference_list[index + 1].shape[0], size_reference_list[index + 1].shape[1], 3), dtype="float32")
+        upsampled_image = np.zeros((size_reference_list[index + 1].shape[0], size_reference_list[index + 1].shape[1], 3), dtype="uint8")
     else:
-        upsampled_image = np.zeros((size_reference_list[index + 1].shape[0], size_reference_list[index + 1].shape[1]), dtype="float32")
+        upsampled_image = np.zeros((size_reference_list[index + 1].shape[0], size_reference_list[index + 1].shape[1]), dtype="uint8")
 
     upsampled_image[0:size_reference_list[index + 1].shape[0]:2, 0:size_reference_list[index + 1].shape[1]:2] = intensity_reference_list[index][0:size_reference_list[index].shape[0],0:size_reference_list[index].shape[1]]
     upsampled_image[0:size_reference_list[index + 1].shape[0]:2, 1:size_reference_list[index + 1].shape[1]:2] = upsampled_image[0:upsampled_image.shape[0] - 1:2,0:upsampled_image.shape[1] - 1:2]
@@ -245,15 +245,16 @@ def computePyr(img, numlayers):
     max_layers=1+math.ceil(math.log(math.sqrt(img_h*img_w)/4, 2));
 
     downscale=2
-    sigma = 2
-    gauss_kern_size = int(4 * sigma + 1)
+    sigma = 1
+    gauss_kern_size = int(6*sigma-1)
     g_x = cv2.getGaussianKernel(gauss_kern_size, sigma)
     g_y = cv2.getGaussianKernel(gauss_kern_size, sigma)
     g_xy= g_x*g_y.transpose()
     channel=img.ndim
 
     if numlayers> max_layers:
-        return None
+        print("Invalid number of pyramid layers")
+        exit()
 
     else:
         gaussian_pyramid=[]
@@ -271,10 +272,10 @@ def lapCollapse(laplacian_pyramid, gauss_kern, num_layers, channels):
 
         if channels == 3:
             gaussian_smoothening= np.zeros((laplacian_pyramid[i + 1].shape[0], laplacian_pyramid[i + 1].shape[1], 3),
-                                     dtype="float32")
+                                     dtype="uint8")
         else:
             gaussian_smoothening= np.zeros((laplacian_pyramid[i + 1].shape[0], laplacian_pyramid[i + 1].shape[1]),
-                                     dtype="float32")
+                                     dtype="uint8")
 
         upsampled_image=upsample(reconstructed_image[0],laplacian_pyramid,reconstructed_image,i)
         gaussian_smoothening=conv2(upsampled_image,gauss_kern,0)
@@ -282,13 +283,14 @@ def lapCollapse(laplacian_pyramid, gauss_kern, num_layers, channels):
         reconstructed_image.append(reconstructed_layer)
         '''cv2.imshow('t',laplacian_pyramid[i+1])
         cv2.waitKey(0)'''
+        #recontructed_output=reconstructed_image[-1].astype("uint8")
 
     return reconstructed_image[-1]
 
 def getGaussKernel(downscale):
 
-    sigma = 4
-    gauss_size = int(4*sigma +1)
+    sigma = 1
+    gauss_size = int(6*sigma-1)
     g_x=cv2.getGaussianKernel(gauss_size, sigma)
     g_y=cv2.getGaussianKernel(gauss_size, sigma)
     g_xy= g_x*g_y.transpose()
@@ -301,10 +303,27 @@ def ImageBlend(src_image,src_mask,target_image,target_mask):
 
     for i in range(0,src_image.numlayers):
 
-        result_image=np.add(cv2.bitwise_and(src_image.laplacian[i],src_image.laplacian[i],mask=src_mask.gaussian[i]),cv2.bitwise_and(target_image.laplacian[i], target_image.laplacian[i], mask=target_mask.gaussian[i]))
+        #gaussian_mask=lineartransform(src_mask.gaussian[i],255,0,1,0)
+        #gaussian_mask_inverse=lineartransform(target_mask.gaussian[i],255,0,1,0)
+
+        '''result_image=np.add(src_image.laplacian[i]*(src_mask.gaussian[i][:,:,None]//255),target_image.laplacian[i]*(target_mask.gaussian[i][:,:,None]//255))
+        result_image=(result_image*255).astype("uint8")'''
+        result_image=np.add(cv2.bitwise_and(src_image.laplacian[i],src_image.laplacian[i],mask=src_mask.gaussian[i]), cv2.bitwise_and(target_image.laplacian[i], target_image.laplacian[i],mask=target_mask.gaussian[i]))
         blended_laplacian.append(result_image)
 
+    '''cv2.imshow("test",blended_laplacian[0])
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    exit()'''
     return blended_laplacian
 
+def gausssmoothening(img,sigma):
 
+    kern_size=int(4*sigma-1)
+    g_x=cv2.getGaussianKernel(kern_size, sigma)
+    g_y=cv2.getGaussianKernel(kern_size, sigma)
+    g_xy=g_x*g_y.transpose()
 
+    img=conv2(img,g_xy,0)
+
+    return img
