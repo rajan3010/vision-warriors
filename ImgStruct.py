@@ -14,9 +14,18 @@ class Image():
     gaussian=[]
     numlayers=0
 
-    def __init__(self, img,name):
+    def __init__(self, img,name,target_img=None,startpoint=(0,0)):
         self.name=name
         self.img=img
+        if target_img!=None:
+            target_h, target_w = target_img.getshape()
+            if img.shape[0]!=target_h or img.shape[1]!=target_w:
+                self.refit(target_img,startpoint)
+            else:
+                pass
+        else:
+            pass
+
         self.mask = np.zeros((self.img.shape[0], self.img.shape[1]), dtype='uint8')
 
     def setPyramids(self, numlayers):
@@ -33,7 +42,7 @@ class Image():
 
     def callGUI(self):
 
-        selection = input("Choose the type of selection 1.Free Form 2.Rectangle")
+        selection = input("Choose the type of selection 1.Free Form 2.Rectangle 3.Ellipse")
 
         self.mask = guiInterface.guiMaskSelect(self.img,int(selection)-1)
         self.mask_complement=255-self.mask
@@ -57,3 +66,19 @@ class Image():
 
         self.laplacian=laplacian_list
         self.img=ImageProcUtils.lapCollapse(self.laplacian, self.gauss,self.numlayers, channels)
+
+    def normalize_mask(self):
+
+        for i in range(0,len(self.gaussian)):
+            self.gaussian[i]=(np.around(self.gaussian[i]/255)*255).astype("uint8")
+
+    def refit(self, tgt_img, startpoint):
+
+        if tgt_img.img.ndim==3:
+            padded_image=np.zeros((tgt_img.img.shape[0], tgt_img.img.shape[1], 3),dtype="uint8")
+        else:
+            padded_image=np.zeros((tgt_img.img.shape[0], tgt_img.img.shape[1]),dtype="uint8")
+
+        padded_image[startpoint[1]:startpoint[1]+self.img.shape[0], startpoint[0]:startpoint[0]+self.img.shape[1]]=self.img
+
+        self.img = padded_image
