@@ -24,7 +24,7 @@ output=np.zeros((lena_src_image.shape[0], lena_src_image.shape[1]))
 target_image=ImgStruct.Image(lena_target_image,"target image") #use it for image pair 1 and 2
 #target_image=ImgStruct.Image(lena_target_gray,"target image") #use it for image pair 3
 target_image.setPyramids(numlayers)
-target_image.display_image_list(target_image.gaussian)
+target_image.display_image_list(target_image.laplacian)
 
 src_image=ImgStruct.Image(lena_src_image,"Source Image",target_image,(169,207)) #use it for image pair 2 which contains prealigned starting point, the starting point doesnt affect image pair 1 as they are of equal size.
 #src_image=ImgStruct.Image(lena_src_gray,"Source Image",target_image,(169,0))   #use it for image pair 3 with praligned starting coordinates.
