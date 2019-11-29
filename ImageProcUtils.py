@@ -287,9 +287,9 @@ def lapCollapse(laplacian_pyramid, gauss_kern, num_layers, channels):
 
     return reconstructed_image[-1]
 
-def getGaussKernel(downscale):
+def getGaussKernel(sigma):
 
-    sigma = 1
+    #sigma = 1
     gauss_size = int(6*sigma-1)
     g_x=cv2.getGaussianKernel(gauss_size, sigma)
     g_y=cv2.getGaussianKernel(gauss_size, sigma)
@@ -319,7 +319,7 @@ def ImageBlend(src_image,src_mask,target_image,target_mask):
 
 def gausssmoothening(img,sigma):
 
-    kern_size=int(4*sigma-1)
+    kern_size=int(6*sigma-1)
     g_x=cv2.getGaussianKernel(kern_size, sigma)
     g_y=cv2.getGaussianKernel(kern_size, sigma)
     g_xy=g_x*g_y.transpose()
@@ -327,3 +327,44 @@ def gausssmoothening(img,sigma):
     img=conv2(img,g_xy,0)
 
     return img
+
+def laplacianscale(img, k, initial_scale):
+
+    scale_size=5
+    laplacian=[]
+
+    for i in range(0, scale_size):
+
+        g1 = getGaussKernel(pow(k, i)*initial_scale)
+        g2 = getGaussKernel(pow(k, i+1)*initial_scale)
+
+        img_out = conv2(img, g1-g2, 0)
+        laplacian.append(img_out)
+
+    return laplacian
+
+def laplacianoctave(img, k, initial_scale, num_layers):
+
+    img_h, img_w = img.shape[:2]
+    max_layers=1+math.ceil(math.log(math.sqrt(img_h*img_w)/4, 2));
+
+    if num_layers> max_layers:
+        print("Invalid number of pyramid layers")
+        exit()
+
+    else:
+
+        laplacian_octave=[]
+        laplacian_temp_out=[]
+
+        for i in range(0,num_layers):
+
+            if i > 0:
+                img = downsample(img)
+                initial_scale = 2*initial_scale
+
+            laplacian_temp_out = laplacianscale(img, k, initial_scale)
+
+            laplacian_octave.append(laplacian_temp_out)
+
+    return laplacian_octave
