@@ -9,7 +9,7 @@ import guiInterface
 
 class Image():
 
-    gauss=ImageProcUtils.getGaussKernel(2)
+    gauss=ImageProcUtils.getGaussKernel(1)
     laplacian=[]
     gaussian=[]
     numlayers=0

@@ -5,7 +5,7 @@ import numpy as np
 from skimage.exposure import rescale_intensity
 from enum import Enum
 import math
-
+import matplotlib.pyplot as plot
 import pyfftw
 
 
@@ -92,7 +92,7 @@ def conv2(f,win,pad):
                 convoluted_image[h, w] = k.sum()
 
     convoluted_image = rescale_intensity(convoluted_image, in_range=(0, 255))
-    convoluted_image = (convoluted_image*250).astype("uint8")
+    #convoluted_image = (convoluted_image*255).astype("uint8")
 
     return convoluted_image
 
@@ -290,7 +290,7 @@ def lapCollapse(laplacian_pyramid, gauss_kern, num_layers, channels):
 def getGaussKernel(sigma):
 
     #sigma = 1
-    gauss_size = int(6*sigma-1)
+    gauss_size = int(4*sigma+0.5)
     g_x=cv2.getGaussianKernel(gauss_size, sigma)
     g_y=cv2.getGaussianKernel(gauss_size, sigma)
     g_xy= g_x*g_y.transpose()
@@ -319,7 +319,7 @@ def ImageBlend(src_image,src_mask,target_image,target_mask):
 
 def gausssmoothening(img,sigma):
 
-    kern_size=int(6*sigma-1)
+    kern_size=int(4*sigma-1)
     g_x=cv2.getGaussianKernel(kern_size, sigma)
     g_y=cv2.getGaussianKernel(kern_size, sigma)
     g_xy=g_x*g_y.transpose()
@@ -332,14 +332,30 @@ def laplacianscale(img, k, initial_scale):
 
     scale_size=5
     laplacian=[]
+    sigma_list=[]
 
-    for i in range(0, scale_size):
+    sigma_init=pow(k,0) * initial_scale
+    g_init = getGaussKernel(sigma_init)
+    gauss_init=conv2(img, g_init,0)
 
-        g1 = getGaussKernel(pow(k, i)*initial_scale)
-        g2 = getGaussKernel(pow(k, i+1)*initial_scale)
+    for i in range(0, scale_size-1):
 
-        img_out = conv2(img, g1-g2, 0)
-        laplacian.append(img_out)
+        sigma_next=pow(k, i+1) * initial_scale
+        g_next = getGaussKernel(sigma_next)
+        gauss_next = conv2(img, g_next, 0)
+
+        normalized_dog=gauss_next-gauss_init
+        '''cv2.imshow("test",normalized_dog)
+        cv2.waitKey(0)'''
+        laplacian.append(normalized_dog)
+        sigma_list.append(sigma_init)
+        gauss_init=gauss_next
+        sigma_init=sigma_next
+
+    size=len(laplacian)
+    laplacian_np=np.array(laplacian)
+    coordinates=list(set(keypointdetect(img, laplacian_np,size,sigma_list)))
+    coordinates=np.array(coordinates)
 
     return laplacian
 
@@ -368,3 +384,44 @@ def laplacianoctave(img, k, initial_scale, num_layers):
             laplacian_octave.append(laplacian_temp_out)
 
     return laplacian_octave
+
+def keypointdetect(img,laplacianscale,size,sigma_list):
+
+    img_h,img_w= img.shape[:2]
+    keypoints=[]
+
+
+    fig, a=plot.subplots()
+    nh, nw= img.shape
+    a.imshow(img, interpolation="nearest", cmap="gray")
+    c=None
+
+    for i in range(0,size):
+
+        window_size=int(4*sigma_list[i] + 0.5)
+        pad=window_size//2
+
+        for y in range(pad, img_h - pad):
+            for x in range(pad, img_w - pad):
+                max = laplacianscale[:, y-1:y+2, x-1:x+2]
+
+                z, m, n = np.unravel_index(max.argmax(), max.shape)
+
+                if z == i and m == 1 and n == 1:
+
+                    result=np.amax(max)
+                    laplacianscale[:,y-pad:y+pad+1,x-pad:x+pad+1]=1
+                    if result>=0.035:
+                        #keypoints.append((x,y,window_size))
+                        c = plot.Circle((x, y), window_size/ 2, color='red', linewidth=0.5, fill=False)
+                        a.add_patch(c)
+                else:
+                    pass
+    a.plot()
+    plot.show()
+    exit()
+
+    return keypoints
+
+
+
