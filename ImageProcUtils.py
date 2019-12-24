@@ -5,9 +5,13 @@ import numpy as np
 from skimage.exposure import rescale_intensity
 from enum import Enum
 import math
+import matplotlib.pyplot as plot
+import time
+#import pyfftw
 
-import pyfftw
-
+start_time=0
+after_conv_time=0
+end_time=0
 
 class Padtype(Enum):
     ZERO=0
@@ -15,6 +19,21 @@ class Padtype(Enum):
     REFLECT=2
     WRAPAROUND=3
 
+def makepaddingzero(img, pad_width_left,pad_width_right, pad_height_top, pad_height_bottom):
+    try:
+        img_h, img_w = img.shape[:2]
+
+        if img.ndim == 3:
+            padded_image=np.zeros((img_h + pad_height_top + pad_height_bottom, img_w + pad_width_left + pad_width_right, 3),dtype="float32")
+        else:
+            padded_image=np.zeros((img_h + pad_height_top+ pad_height_bottom, img_w + pad_width_left + pad_width_right),dtype="float32")
+
+        padded_image[pad_height_top:pad_height_top + img_h, pad_width_left:pad_width_left + img_w] = img;
+    except:
+        print("kernel size exceeded image size")
+        exit()
+
+    return padded_image
 
 def makepadding(img, pad_width, pad_height, padtype):
 
@@ -92,7 +111,7 @@ def conv2(f,win,pad):
                 convoluted_image[h, w] = k.sum()
 
     convoluted_image = rescale_intensity(convoluted_image, in_range=(0, 255))
-    convoluted_image = (convoluted_image*250).astype("uint8")
+    #convoluted_image = (convoluted_image*255).astype("uint8")
 
     return convoluted_image
 
@@ -113,61 +132,66 @@ def lineartransform(f, inmax, inmin, outmax, outmin):
 
     return output
 
-
 def DFT2(f):
+    global img
+    global normalizedImg1
+    intensity = []
+    img = f
 
-    global fftw_column_object
+    x, y = img.shape[:2]
 
-    f_h, f_w = f.shape[:2]
+    normalizedImg1 = np.zeros((x, y))
+    ##################################
+    for i in range(0, x, 1):
+        for j in range(0, y, 1):
+            intensity.append((int(img[i, j])))  # storing the intensity values of all the pixels in a list
+    c = min(intensity)  # finding minimum intensity value
+    d = max(intensity)  # finding maximum intensity value
+    #print(c, d)
 
-    '''column_input = pyfftw.empty_aligned(f_h, dtype='complex128')
-    row_input = pyfftw.empty_aligned(f_w, dtype='complex128')
-    column_output = pyfftw.empty_aligned(f_h, dtype='complex128')
-    row_output = pyfftw.empty_aligned(f_w, dtype='complex128')
+    a = 0
+    b = 1
 
-    fft_row_object = pyfftw.FFTW(row_input,row_output)
-    fftw_column_object = pyfftw.FFTW(column_input, column_output)'''
+    for i in range(0, x, 1):
+        for j in range(0, y, 1):
+            intensityc = int(img[i, j])
+            val = ((((intensityc - c) * ((b - a) / (d - c))) + a))  # linear transformation
+            normalizedImg1.itemset((i, j), val)  # setting the pixels to the new intensity value
+    ##################################
 
-    f=f.astype('complex128')
+    f1 = np.fft.fft(normalizedImg1, n=None, axis=0, norm=None)
+    f2 = np.fft.fft(f1, n=None, axis=1, norm=None)
+    f2conj = np.conj(f2)
+    return f2conj
 
-    for x in range(0,f_h):
+def DFT2k(f):
+    global img
 
-        fft_rowinput = np.copy(f[x, :])
+    # a = np.array(img, dtype ='float32')
+    f1 = np.fft.fft(f, n=None, axis=0, norm=None)
+    f2 = np.fft.fft(f1, n=None, axis=1, norm=None)
+    f2conj = np.conj(f2)
+    return f2conj
 
-        b=np.fft.fft(fft_rowinput)
-
-        f[x, :]=b
-        '''fft_row_object.update_arrays(row_input, row_output)'''
-
-    first_transpose = np.transpose(f)
-
-    for y in range(0,f_w):
-
-        fft_input=np.copy(first_transpose[y,:])
-
-        a=np.fft.fft(fft_input)
-
-        first_transpose[y, :]=a
-
-        '''column_input = np.copy(first_transpose[y, :])
-        fftw_column_object.update_arrays(column_input, column_output)
-
-        first_transpose[y, :] = np.copy(column_output)'''
-
-    last_transpose = np.transpose(first_transpose)
-
-    return last_transpose
+def IDFT2(f2conj):
+    x, y = f2conj.shape[:2]
+    f3 = np.fft.fft(f2conj, n=None, axis=0, norm=None)
+    f4 = np.fft.fft(f3, n=None, axis=1, norm=None)
+    f4conj = np.conj(f4) / ((x - 1) * (-1 + y))
+    g = np.real(np.array(f4conj))
+    return g
 
 
-def IDFT2(f):
 
-    f=np.conj(f)
-    fft_image= DFT2(f)
-    img_h, img_w= f.shape[:2]
+def conv_fast(original_image, kernel):
 
-    ifft_image= np.conj(fft_image)/(img_h*img_w)
+    sz = original_image.shape
+    sz = (sz[0] - kernel.shape[0], sz[1] - kernel.shape[1])  # total amount of padding
+    kernel2 = makepaddingzero(np.array(kernel), (sz[1]+1)//2, sz[1]//2, (sz[0]+1)//2, sz[0]//2)
+    kernel2 = np.fft.ifftshift(kernel2)
+    filtered = np.real(IDFT2(DFT2(original_image) * DFT2k(kernel2)))
+    return (filtered)
 
-    return ifft_image
 
 def downsample(img):
 
@@ -287,15 +311,13 @@ def lapCollapse(laplacian_pyramid, gauss_kern, num_layers, channels):
 
     return reconstructed_image[-1]
 
-def getGaussKernel(downscale):
-
-    sigma = 1
-    gauss_size = int(6*sigma-1)
-    g_x=cv2.getGaussianKernel(gauss_size, sigma)
-    g_y=cv2.getGaussianKernel(gauss_size, sigma)
-    g_xy= g_x*g_y.transpose()
-
-    return g_xy
+def getGaussKernel(sigma):
+    # Obtaining a Gaussain Kernel
+    global maxdim
+    maxdim = int(np.ceil(2 * sigma) - 0.5)
+    kernel_temp = cv2.getGaussianKernel((maxdim * 2) + 1, sigma)
+    g_kernel = kernel_temp * kernel_temp.transpose()
+    return (g_kernel)
 
 def ImageBlend(src_image,src_mask,target_image,target_mask):
 
@@ -317,13 +339,117 @@ def ImageBlend(src_image,src_mask,target_image,target_mask):
     exit()'''
     return blended_laplacian
 
-def gausssmoothening(img,sigma):
+def GaussianSmoothening(img, sigma):
+    gker = getGaussKernel(sigma)
+    imf = conv_fast(img, gker)
+    return (imf)
 
-    kern_size=int(4*sigma-1)
-    g_x=cv2.getGaussianKernel(kern_size, sigma)
-    g_y=cv2.getGaussianKernel(kern_size, sigma)
-    g_xy=g_x*g_y.transpose()
+def laplacianscale(img, k, initial_scale):
+    global start_time
+    global after_conv_time
 
-    img=conv2(img,g_xy,0)
+    start_time=time.time()
+    scale_size=10
+    laplacian=[]
+    sigma_list=[]
 
-    return img
+    sigma_init=pow(k,0) * initial_scale
+    g_init = getGaussKernel(sigma_init)
+    gauss_init=conv_fast(img, g_init)
+
+    for i in range(0, scale_size-1):
+
+        sigma_next=pow(k, i+1) * initial_scale
+        g_next = getGaussKernel(sigma_next)
+        gauss_next = conv_fast(img, g_next)
+
+        normalized_dog=gauss_next-gauss_init
+        '''cv2.imshow("test",normalized_dog)
+        cv2.waitKey(0)'''
+        laplacian.append(normalized_dog)
+        sigma_list.append(sigma_init)
+        gauss_init=gauss_next
+        sigma_init=sigma_next
+
+    after_conv_time=time.time()
+    size=len(laplacian)
+    laplacian_np=np.array(laplacian)
+    coordinates=list(set(keypointdetect(img, laplacian_np,size,sigma_list)))
+    coordinates=np.array(coordinates)
+
+    return laplacian
+
+def laplacianoctave(img, k, initial_scale, num_layers):
+
+    img_h, img_w = img.shape[:2]
+    max_layers=1+math.ceil(math.log(math.sqrt(img_h*img_w)/4, 2));
+
+    if num_layers> max_layers:
+        print("Invalid number of pyramid layers")
+        exit()
+
+    else:
+
+        laplacian_octave=[]
+        laplacian_temp_out=[]
+
+        for i in range(0,num_layers):
+
+            if i > 0:
+                img = downsample(img)
+                initial_scale = 2*initial_scale
+
+            laplacian_temp_out = laplacianscale(img, k, initial_scale)
+
+            laplacian_octave.append(laplacian_temp_out)
+
+    return laplacian_octave
+
+def keypointdetect(img,laplacianscale,size,sigma_list):
+    global end_time
+
+    img_h,img_w= img.shape[:2]
+    keypoints=[]
+
+
+    fig, a=plot.subplots()
+    nh, nw= img.shape
+    a.imshow(img, interpolation="nearest", cmap="gray")
+    c=None
+
+    for i in range(0,size):
+
+        window_size=int(4*sigma_list[i] + 0.5)
+        pad=window_size//2
+
+        for y in range(pad, img_h - pad):
+            for x in range(pad, img_w - pad):
+                max = laplacianscale[:, y-1:y+2, x-1:x+2]
+
+                z, m, n = np.unravel_index(max.argmax(), max.shape)
+
+                if z == i and m == 1 and n == 1:
+
+                    result=np.amax(max)
+                    laplacianscale[:,y-pad:y+pad+1,x-pad:x+pad+1]=1
+                    if result>=0.035:
+                        #keypoints.append((x,y,window_size))
+                        pass
+                        c = plot.Circle((x, y), window_size/ 2, color='red', linewidth=1.0, fill=False)
+                        a.add_patch(c)
+                else:
+                    pass
+    end_time=time.time()
+    print(start_time)
+    print(end_time)
+    print(end_time-after_conv_time)
+    print(end_time-start_time)
+
+    a.plot()
+    plot.show()
+    exit()
+
+    return keypoints
+
+
+
