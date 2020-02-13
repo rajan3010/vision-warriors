@@ -18,3 +18,6 @@ blender.py:
 
 blobdetecti.py:
 This program is for generating non-redundant blobs using SIFT algorithm.
+
+Image Blending Output:
+![](abraham_trump.png)
