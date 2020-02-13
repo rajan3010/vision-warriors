@@ -21,3 +21,5 @@ This program is for generating non-redundant blobs using SIFT algorithm.
 
 Image Blending Output:
 ![](abraham_trump.png)
+![](pennywise_vendor.png)
+![](mona_gadot_final_ellipse.png)
